@@ -165,9 +165,70 @@ def apply_neural_network(train_dataset, train_labels, valid_dataset, valid_label
         #test_feed_dict = {tf_train_dataset: test_dataset[0:batch_size, :]}
         print("Test accuracy %f" % accuracy(test_prediction.eval(), test_labels))
 
+def apply_neural_network_with_l2_reg(train_dataset, train_labels, valid_dataset,
+                                    valid_labels, test_dataset, test_labels):
+    train_subset = 10000
+    beta = 0.01
+    hidden_nodes = 1024
+    input_nodes = image_size * image_size
+    output_nodes = num_labels
+    batch_size = 128
+    learning_rate = 0.5
+    num_batch = int(train_labels.shape[0]/batch_size)
+    num_steps = 3001
 
-#if __name__ == '__main__':
-    #main()
+    graph = tf.Graph()
+    with graph.as_default():
+        tf_train_dataset = tf.placeholder(tf.float32, shape=(batch_size, image_size * image_size))
+        tf_train_labels = tf.placeholder(tf.float32, shape=(batch_size, num_labels))
+        tf_valid_dataset = tf.constant(valid_dataset)
+        tf_test_dataset = tf.constant(test_dataset)
+
+        weights = {
+            'hidden': tf.Variable(tf.random_normal([input_nodes, hidden_nodes])),
+            'output': tf.Variable(tf.random_normal([hidden_nodes, output_nodes]))
+        }
+        biases = {
+            'hidden': tf.Variable(tf.random_normal([hidden_nodes])),
+            'output': tf.Variable(tf.random_normal([output_nodes]))
+        }
+        hidden_layer = tf.add(tf.matmul(tf_train_dataset, weights['hidden']), biases['hidden'])
+        hidden_layer = tf.nn.relu(hidden_layer)
+        output_layer = tf.add(tf.matmul(hidden_layer, weights['output']), biases['output'])
+        loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=output_layer, labels=tf_train_labels))
+        regulizer = tf.nn.l2_loss(weights['hidden']) + tf.nn.l2_loss(weights['output'])
+        loss = tf.reduce_mean(loss + beta * regulizer)
+        optimizer = tf.train.GradientDescentOptimizer(0.5).minimize(loss)
+
+        train_prediction = tf.nn.softmax(output_layer)
+
+        #For validation
+        validation_hidden_layer = tf.add(tf.matmul(tf_valid_dataset, weights['hidden']), biases['hidden'])
+        validation_hidden_layer = tf.nn.relu(validation_hidden_layer)
+        validation_output_layer = tf.add(tf.matmul(validation_hidden_layer, weights['output']), biases['output'])
+        validation_prediction = tf.nn.softmax(validation_output_layer)
+
+        #For testing
+        test_hidden_layer = tf.add(tf.matmul(tf_test_dataset, weights['hidden']), biases['hidden'])
+        test_hidden_layer = tf.nn.relu(test_hidden_layer)
+        test_output_layer = tf.add(tf.matmul(test_hidden_layer, weights['output']), biases['output'])
+        test_prediction = tf.nn.softmax(test_output_layer)
+
+    with tf.Session(graph = graph) as session:
+        tf.global_variables_initializer().run()
+        for step in range(num_steps):
+            offset = (step * batch_size) % (train_labels.shape[0] - batch_size)
+            batch_data = train_dataset[offset:(offset + batch_size), :]
+            batch_labels = train_labels[offset:(offset + batch_size), :]
+            feed_dict = {tf_train_dataset: batch_data, tf_train_labels: batch_labels}
+            _, l, predictions = session.run([optimizer, loss, train_prediction], feed_dict=feed_dict
+                                            )
+            if (step % 500 == 0):
+                print("Minibatch loss = {}".format(l))
+                print("Minibatch accuracy = {}".format(accuracy(predictions, batch_labels)))
+                print("Validation accuracy = {}".format(accuracy(validation_prediction.eval(), valid_labels)))
+        print("Test accuracy = {}".format(accuracy(test_prediction.eval(), test_labels)))
+
 path = '../'
 pickle_file = path + 'notMNIST.pickle'
 print("reading dataset")
@@ -185,7 +246,11 @@ print("running batch gradient descent")
                         valid_dataset=valid_dataset, valid_labels=valid_labels,
                         test_dataset=test_dataset, test_labels=test_labels
                         )"""
-apply_neural_network(train_dataset=train_dataset[:10000, :], train_labels=train_labels[:10000],
+"""apply_neural_network(train_dataset=train_dataset[:10000, :], train_labels=train_labels[:10000],
                         valid_dataset=valid_dataset, valid_labels=valid_labels,
                         test_dataset=test_dataset, test_labels=test_labels
-                        )
+                        )"""
+apply_neural_network_with_l2_reg(train_dataset=train_dataset, train_labels=train_labels,
+                                    valid_dataset=valid_dataset, valid_labels=valid_labels,
+                                    test_dataset=test_dataset, test_labels=test_labels
+                                )
